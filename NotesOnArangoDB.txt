@@ -1,0 +1,179 @@
+———————————————————————————————
+———————————————————————————————
+Supported Data Models:
+	- key/value
+	- document
+	- graphs
+
+———————————————————————————————
+———————————————————————————————
+
+
+Insert a document:
+INSERT {_keys: ‘Test’} INTO collection_name RETURN NEW
+
+———————————————————————————————
+
+Read documents:
+RETURN DOCUMENT (collection_name, [‘key1’, ‘key2’])
+
+———————————————————————————————
+
+Update with a for loop:
+FOR docs IN ['test', 'Test']
+  UPDATE docs WITH {newVal: 1234} IN airports
+  RETURN NEW
+———————————————————————————————
+
+Remove multiple entries:
+FOR variable_name IN [‘test’, ‘Test’]
+  REMOVE variable_name IN collection
+
+———————————————————————————————
+
+Filter:
+FILTER condition
+eg.
+	FOR flight IN flights
+  FILTER flight.TailNum == "N592ML"
+  RETURN flight
+(This is terribly slow, it get better when using indexes)
+
+———————————————————————————————
+
+GEOJson:
+
+for airport in airports
+filter airport.state == "TX"
+return GEO_POINT(airport.long, airport.lat)
+
+for airport in airports
+filter GEO_DISTANCE([-95.01792778, 30.68586111], [airport.long, airport.lat]) <= 50000
+return GEO_POINT(airport.long, airport.lat)
+
+———————————————————————————————
+
+Joins:
+Collect syntax: COLLECT variableName = express options
+
+for airport in airports
+    collect state = airport.state WITH COUNT INTO total
+    sort total desc
+    return {State: state,
+            "Total Airports": total
+    }
+
+———————————————————————————————
+
+Aggregation:
+Clause of COLLECT
+Functions are AGGREGATE versions
+Optimises resource utilisation.
+
+for flight in flights
+  collect aggregate
+  minDistance = min(flight.Distance),
+  maxDistance = max(flight.Distance)
+  return {
+  "Shortest flight": minDistance,
+  "Longest flight": maxDistance
+  }
+
+———————————————————————————————
+
+Graphs:
+
+Named & Anonymous Graphs:
+N: - Managed by ArangoDB
+    - Transactional Modifications
+    - Edge Consistency
+    - Edge cleanup
+    - Graph Module
+
+A: - Flexible Access
+    - No Edge Definitions / Consistency
+    - Client-Side Consistency
+
+Graph syntax:
+
+FOR v, e, p IN 1…1 OUTBOUND
+‘airports/JFK’
+GRAPH ‘flights’
+RETURN p
+
+Typical syntax:
+FOR vertexVariableName(required), edgeVariableName(optional), pathVariableName(optional) IN traversalExporession (min..max)
+
+———————————————————————————————
+FILTER with GRAPH Traversals
+
+FOR airport IN airports
+  FILTER airport.city == "San Francisco" && airport.vip == true
+  RETURN airport
+
+Or
+
+FOR airport IN airports
+  FILTER airport.city == "San Francisco" AND airport.vip == true
+  RETURN airport
+
+Or
+
+FOR airport IN airports
+  FILTER airport.city == "San Francisco"
+  FILTER airport.vip == true
+  RETURN airport
+
+Building the Traversal:
+
+FOR airport IN airports
+  FILTER airport.city == "San Francisco" && airport.vip == true
+    FOR v, e, p IN 1..1 OUTBOUND
+    airport flights
+    FILTER v._id == 'airports/KOA'
+    RETURN p
+
+If I want to increase the depth of the traversal (i.e. more flights with layovers in between):
+
+FOR airport IN airports								// THIS IMPLEMENTATION IS EXPENSIVE RESOURCE-WISE
+  FILTER airport.city == "San Francisco" && airport.vip == true
+    FOR v, e, p IN 2..3 OUTBOUND
+    airport flights
+    FILTER v._id == 'airports/KOA'
+    RETURN p
+
+// TRY THIS ONE:
+
+FOR airport IN airports
+  FILTER airport.city == "San Francisco" && airport.vip == true
+    FOR v, e, p IN 2..3 OUTBOUND
+    airport flights
+    FILTER v._id == 'airports/KOA'
+    FILTER p.edges[*].Month ALL == 1
+    FILTER p.edges[*].Day ALL == 3
+    LIMIT 10
+    RETURN p
+
+// OR EVEN BETTER:
+
+FOR airport IN airports
+  FILTER airport.city == "San Francisco" && airport.vip == true
+    FOR v, e, p IN 2..3 OUTBOUND
+    airport flights
+    FILTER v._id == 'airports/KOA'
+    FILTER p.edges[*].Month ALL == 1
+    FILTER p.edges[*].Day ALL == 3
+    FILTER DATE_ADD(p.edges[0].ArrTimeUTC, 20, 'minutes') < p.edges[1].DepTimeUTC
+    FILTER DATE_ADD(p.edges[1].ArrTimeUTC, 20, 'minutes') < p.edges[2].DepTimeUTC
+    LIMIT 10
+    RETURN p
+———————————————————————————————
+Foxx Microservices Framework:
+
+When to use:
+- Transactional Queries
+- Frequently used queries are optimal
+- Avoid returning large datasets
+- Use full stack Js but it is synchronous.
+- Swagger Documentation out-of-the-box, although providing our own documentation is encouraged.
+- Variety of authentication option (e.g. using the joi library)
